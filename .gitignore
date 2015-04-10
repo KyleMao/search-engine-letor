@@ -5,4 +5,7 @@ bin/
 .DS_Store
 
 # Project specific
+INPUT_DIR/
+TEST_DIR/
+OUTPUT_DIR/
 *.param
