@@ -11,6 +11,7 @@ import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Analyzer.TokenStreamComponents;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.IndexSearcher;
@@ -18,6 +19,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopScoreDocCollector;
+import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.Version;
 
 /**
@@ -54,9 +56,34 @@ public class QryEval {
 
   /**
    * @param args The only argument is the path to the parameter file.
+   * @throws Exception
    */
-  public static void main(String[] args) {
-    System.out.println("test");
+  public static void main(String[] args) throws Exception {
+
+    // must supply parameter file
+    if (args.length < 1) {
+      fatalError(usage);
+    }
+
+    long startTime = System.currentTimeMillis();
+
+    Map<String, String> params = readParam(args[0]);
+
+    // open the index
+    READER = DirectoryReader.open(FSDirectory.open(new File(params.get("indexPath"))));
+    if (READER == null) {
+      fatalError(usage);
+    }
+
+    FeatureGenerator featureGenerator = new FeatureGenerator(params);
+
+    // generate training data
+    featureGenerator.generateTrainData();
+
+    // print running time and memory usage
+    long endTime = System.currentTimeMillis();
+    System.out.println("Running Time: " + (endTime - startTime) + " ms");
+    printMemoryUsage(false);
   }
 
   /**
