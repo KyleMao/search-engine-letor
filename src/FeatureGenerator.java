@@ -1,7 +1,11 @@
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -84,74 +88,121 @@ public class FeatureGenerator {
    */
   public void generateTrainData() throws Exception {
 
+    // Create the output file
+    File evalOut = new File(params.get("letor:trainingFeatureVectorsFile"));
+    if (!evalOut.exists()) {
+      evalOut.createNewFile();
+    }
+    BufferedWriter writer = new BufferedWriter(new FileWriter(evalOut.getAbsoluteFile()));
+
+    // Read the training queries
     Scanner queryScanner =
         new Scanner(new BufferedReader(new FileReader(params.get("letor:trainingQueryFile"))));
+
     while (queryScanner.hasNextLine()) {
       String qLine = queryScanner.nextLine();
       String queryId = qLine.substring(0, qLine.indexOf(':'));
       String query = qLine.substring(qLine.indexOf(':') + 1);
 
+      // Open the relevance judgment file
       Scanner relevanceScanner =
           new Scanner(new BufferedReader(new FileReader(params.get("letor:trainingQrelsFile"))));
+
+      List<String> externalIds = new ArrayList<String>();
+      List<Integer> relevances = new ArrayList<Integer>();
       // Store all the feature vectors for documents in the same query
       List<Double[]> featureVectors = new ArrayList<Double[]>();
+
       while (relevanceScanner.hasNextLine()) {
         String rLine = relevanceScanner.nextLine();
         String[] parts = rLine.split(" ");
         if (parts[0].equals(queryId)) {
+          externalIds.add(parts[2]);
+          relevances.add(Integer.parseInt(parts[3]));
           featureVectors.add(calculateFeatures(query, QryEval.getInternalDocid(parts[2])));
         }
       }
       relevanceScanner.close();
+      writeFeature(writer, queryId, relevances, externalIds, featureVectors);
     }
     queryScanner.close();
+    writer.close();
   }
 
+  /*
+   * Returns a feature vector for the <q, d> pair.
+   */
   private Double[] calculateFeatures(String query, int internalId) throws IOException {
 
     Double[] f = new Double[N_FEATURE];
 
     Document d = QryEval.READER.document(internalId);
-    // Spam score for the document
-    if (featureDisable.contains(0)) {
-      f[0] = 0.0;
-    } else {
-      f[0] = (double) Integer.parseInt(d.get("score"));
-    }
-
     String rawUrl = d.get("rawUrl");
-    // Url depth for the document
-    if (featureDisable.contains(1)) {
-      f[1] = 0.0;
-    } else {
-      f[1] = (double) (rawUrl.length() - rawUrl.replace("", "").length());
-    }
+    String[] queryStems = QryEval.tokenizeQuery(query);
 
-    // FromWikipedia score for the document
-    if ((!featureDisable.contains(2)) && rawUrl.contains("wikipedia.org")) {
-      f[2] = 1.0;
-    } else {
-      f[2] = 0.0;
-    }
-
-    // PageRank score for the document
+    f[0] = getSpamScore(d);
+    f[1] = getUrlDepth(rawUrl);
+    f[2] = getWikiScore(rawUrl);
     f[3] = getPageRankScore(internalId);
 
-    String[] queryStems = QryEval.tokenizeQuery(query);
-    
     // BM25 scores for <q, d> in 4 fields
     f[4] = retrievalEvaluator.getFeatureBM25(queryStems, internalId, "body", featureDisable);
     f[7] = retrievalEvaluator.getFeatureBM25(queryStems, internalId, "title", featureDisable);
     f[10] = retrievalEvaluator.getFeatureBM25(queryStems, internalId, "url", featureDisable);
     f[13] = retrievalEvaluator.getFeatureBM25(queryStems, internalId, "inlink", featureDisable);
-    
+
     // Indri scores for <q, d> in 4 fields
     f[5] = retrievalEvaluator.getFeatureIndri(queryStems, internalId, "body", featureDisable);
     f[8] = retrievalEvaluator.getFeatureIndri(queryStems, internalId, "title", featureDisable);
     f[11] = retrievalEvaluator.getFeatureIndri(queryStems, internalId, "url", featureDisable);
     f[14] = retrievalEvaluator.getFeatureIndri(queryStems, internalId, "inlink", featureDisable);
 
+    // Term overlap scores for <q, d> in 4 fields
+    f[6] = getTermOverlapScore(queryStems, internalId, "body");
+    f[9] = getTermOverlapScore(queryStems, internalId, "title");
+    f[12] = getTermOverlapScore(queryStems, internalId, "url");
+    f[15] = getTermOverlapScore(queryStems, internalId, "inlink");
+
+    f[16] = 0.0;
+    f[17] = 0.0;
+
     return f;
+  }
+
+  /*
+   * Returns the spam score for a document.
+   */
+  private double getSpamScore(Document d) {
+
+    if (featureDisable.contains(0)) {
+      return 0.0;
+    } else {
+      return Integer.parseInt(d.get("score"));
+    }
+  }
+
+  /*
+   * Returns the URL depth for a document.
+   */
+  private double getUrlDepth(String url) {
+
+    if (featureDisable.contains(1)) {
+      return 0.0;
+    } else {
+      return (url.length() - url.replace("/", "").length());
+    }
+  }
+
+  /*
+   * Returns the FromWikipedia score for a document.
+   */
+  private double getWikiScore(String url) {
+
+    if ((!featureDisable.contains(2)) && url.contains("wikipedia.org")) {
+      return 1.0;
+    } else {
+      return 0.0;
+    }
   }
 
   /*
@@ -164,6 +215,45 @@ public class FeatureGenerator {
     } else {
       return pageRankScores.get(internalId);
     }
+  }
+
+  /*
+   * Returns the term overlap score for <q, d> of a specified field.
+   */
+  private double getTermOverlapScore(String[] queryStems, int internalId, String fieldName)
+      throws IOException {
+
+    // Return 0.0 when this score is not needed
+    if (featureDisable.contains(6) && fieldName.equals("body")) {
+      return 0.0;
+    }
+    if (featureDisable.contains(9) && fieldName.equals("title")) {
+      return 0.0;
+    }
+    if (featureDisable.contains(12) && fieldName.equals("url")) {
+      return 0.0;
+    }
+    if (featureDisable.contains(15) && fieldName.equals("inlink")) {
+      return 0.0;
+    }
+
+    double score = 0.0;
+    TermVector termVector = null;
+    try {
+      termVector = new TermVector(internalId, fieldName);
+    } catch (Exception e) {
+      return score;
+    }
+    for (int i = 1; i < termVector.stemsLength(); i++) {
+      String stem = termVector.stemString(i);
+      if (Arrays.asList(queryStems).contains(stem)) {
+        score += 1.0;
+      }
+    }
+    // Change to percentage
+    score /= (double) queryStems.length;
+
+    return score;
   }
 
   /*
@@ -185,6 +275,23 @@ public class FeatureGenerator {
     }
 
     return model;
+  }
+
+  /*
+   * Write the feature vectors for SVM-rank.
+   */
+  private static void writeFeature(BufferedWriter writer, String qId, List<Integer> rels,
+      List<String> externalIds, List<Double[]> vectors) throws IOException {
+
+    for (int i = 0; i < rels.size(); i++) {
+      String line = String.format("%d qid:%s", rels.get(i), qId);
+      Double[] featureVector = vectors.get(i);
+      for (int j = 0; j < featureVector.length; j++) {
+        line += String.format(" %d:%f", j + 1, featureVector[j]);
+      }
+      line += (" # " + externalIds.get(i) + "\n");
+      writer.write(line);
+    }
   }
 
 }

@@ -3,6 +3,12 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.lucene.index.DocsAndPositionsEnum;
+import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.util.BytesRef;
+
 /**
  * This class evaluates the score of a query and a document with a specific retrieval model.
  * 
@@ -82,7 +88,7 @@ public class RetrievalEvaluator {
   }
 
   /**
-   * Get the BM25 score for <q, d>of a specified field.
+   * Get the BM25 score for <q, d> of a specified field.
    * 
    * @param queryStems The stemmed BOW query.
    * @param internalId The internal document ID.
@@ -112,7 +118,12 @@ public class RetrievalEvaluator {
     }
 
     double score = 0.0;
-    TermVector termVector = new TermVector(internalId, fieldName);
+    TermVector termVector = null;
+    try {
+      termVector = new TermVector(internalId, fieldName);
+    } catch (Exception e) {
+      return score;
+    }
 
     double docLen = dls.getDocLength(fieldName, internalId);
     double avgLen = getAvglen(fieldName);
@@ -133,6 +144,16 @@ public class RetrievalEvaluator {
     return score;
   }
 
+  /**
+   * Get the Indri score for <q, d> of a specified field.
+   * 
+   * @param queryStems The stemmed BOW query.
+   * @param internalId The internal document ID.
+   * @param fieldName The field name.
+   * @param featureDisable Specifies which feature is disabled.
+   * @return Indri score.
+   * @throws IOException
+   */
   public double getFeatureIndri(String[] queryStems, int internalId, String fieldName,
       Set<Integer> featureDisable) throws IOException {
 
@@ -152,9 +173,14 @@ public class RetrievalEvaluator {
     if (featureDisable.contains(13) && fieldName.equals("inlink")) {
       return 0.0;
     }
-
+    
+    TermVector termVector = null;
+    try {
+      termVector = new TermVector(internalId, fieldName);
+    } catch (Exception e) {
+      return 0.0;
+    }
     double score = 1.0;
-    TermVector termVector = new TermVector(internalId, fieldName);
     Set<Integer> hasScore = new HashSet<Integer>();
 
     double docLen = dls.getDocLength(fieldName, internalId);
@@ -172,12 +198,17 @@ public class RetrievalEvaluator {
         score *= Math.pow(p, 1.0 / (double) queryStems.length);
       }
     }
-    
+
+    // Deal with default scores
     if (hasScore.isEmpty()) {
       score = 0.0;
     } else {
       for (int i = 0; i < queryStems.length; i++) {
         if (!hasScore.contains(i)) {
+          double ctf = getCtf(queryStems[i], fieldName);
+          double p_mle = ctf / colLen;
+          double p = (1 - lambda) * mu * p_mle / ((double) docLen + mu) + lambda * p_mle;
+          score *= Math.pow(p, 1.0 / (double) queryStems.length);
         }
       }
     }
@@ -219,6 +250,33 @@ public class RetrievalEvaluator {
     }
 
     return 0.0;
+  }
+
+  /*
+   * Returns the CTF of a term in a specified field.
+   */
+  private static int getCtf(String termString, String fieldString) throws IOException {
+
+    int ctf = 0;
+
+    // Prepare to access the index
+    BytesRef termBytes = new BytesRef(termString);
+    Term term = new Term(fieldString, termBytes);
+    if (QryEval.READER.docFreq(term) < 1) {
+      return ctf;
+    }
+
+    // Lookup the inverted list.
+    DocsAndPositionsEnum iList =
+        MultiFields.getTermPositionsEnum(QryEval.READER, MultiFields.getLiveDocs(QryEval.READER),
+            fieldString, termBytes);
+    
+    // Calculate CTF
+    while (iList.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+      ctf += iList.freq();
+    }
+    
+    return ctf;
   }
 
 }
