@@ -284,13 +284,13 @@ public class FeatureGenerator {
       List<String> externalIds, List<Double[]> vectors) throws IOException {
 
     for (int i = 0; i < rels.size(); i++) {
-      String line = String.format("%d qid:%s", rels.get(i), qId);
+      String line = String.format("%d qid:%s", rels.get(i)+3, qId);
       Double[] featureVector = vectors.get(i);
       for (int j = 0; j < featureVector.length; j++) {
         line += (" " + (j+1) + ":" + featureVector[j]);
       }
       line += (" # " + externalIds.get(i));
-      // System.out.println(line);
+      System.out.println(line);
       writer.write(line+'\n');
     }
   }

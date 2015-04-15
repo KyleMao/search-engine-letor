@@ -3,10 +3,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.lucene.index.DocsAndPositionsEnum;
-import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.BytesRef;
 
 /**
@@ -88,7 +85,7 @@ public class RetrievalEvaluator {
   }
 
   /**
-   * Get the BM25 score for <q, d> of a specified field.
+   * Get the BM25 score for <q, d>of a specified field.
    * 
    * @param queryStems The stemmed BOW query.
    * @param internalId The internal document ID.
@@ -122,7 +119,7 @@ public class RetrievalEvaluator {
     try {
       termVector = new TermVector(internalId, fieldName);
     } catch (Exception e) {
-      return score;
+      return Double.NaN;
     }
 
     double docLen = dls.getDocLength(fieldName, internalId);
@@ -145,7 +142,7 @@ public class RetrievalEvaluator {
   }
 
   /**
-   * Get the Indri score for <q, d> of a specified field.
+   * Get the Indri score for <q, d>of a specified field.
    * 
    * @param queryStems The stemmed BOW query.
    * @param internalId The internal document ID.
@@ -161,40 +158,40 @@ public class RetrievalEvaluator {
     if (!hasIndri) {
       return 0.0;
     }
-    if (featureDisable.contains(4) && fieldName.equals("body")) {
+    if (featureDisable.contains(5) && fieldName.equals("body")) {
       return 0.0;
     }
-    if (featureDisable.contains(7) && fieldName.equals("title")) {
+    if (featureDisable.contains(8) && fieldName.equals("title")) {
       return 0.0;
     }
-    if (featureDisable.contains(10) && fieldName.equals("url")) {
+    if (featureDisable.contains(11) && fieldName.equals("url")) {
       return 0.0;
     }
-    if (featureDisable.contains(13) && fieldName.equals("inlink")) {
+    if (featureDisable.contains(14) && fieldName.equals("inlink")) {
       return 0.0;
     }
-    
+
     TermVector termVector = null;
     try {
       termVector = new TermVector(internalId, fieldName);
     } catch (Exception e) {
-      return 0.0;
+      return Double.NaN;
     }
     double score = 1.0;
     Set<Integer> hasScore = new HashSet<Integer>();
 
     double docLen = dls.getDocLength(fieldName, internalId);
-    double colLen = getCollen(fieldName);
+    double colLen = getColLen(fieldName);
 
     for (int i = 1; i < termVector.stemsLength(); i++) {
       String stem = termVector.stemString(i);
       if (Arrays.asList(queryStems).contains(stem)) {
         hasScore.add(Arrays.asList(queryStems).indexOf(stem));
-        // Calculate the BM25 score
+        // Calculate the Indri score
         double tf = termVector.stemFreq(i);
-        double ctf = termVector.totalStemFreq(i);
+        double ctf = QryEval.READER.totalTermFreq(new Term(fieldName, new BytesRef(stem)));
         double p_mle = ctf / colLen;
-        double p = (1 - lambda) * (tf + mu * p_mle) / ((double) docLen + mu) + lambda * p_mle;
+        double p = (1 - lambda) * (tf + mu * p_mle) / (docLen + mu) + lambda * p_mle;
         score *= Math.pow(p, 1.0 / (double) queryStems.length);
       }
     }
@@ -205,9 +202,10 @@ public class RetrievalEvaluator {
     } else {
       for (int i = 0; i < queryStems.length; i++) {
         if (!hasScore.contains(i)) {
-          double ctf = getCtf(queryStems[i], fieldName);
+          double ctf =
+              QryEval.READER.totalTermFreq(new Term(fieldName, new BytesRef(queryStems[i])));
           double p_mle = ctf / colLen;
-          double p = (1 - lambda) * mu * p_mle / ((double) docLen + mu) + lambda * p_mle;
+          double p = (1 - lambda) * mu * p_mle / (docLen + mu) + lambda * p_mle;
           score *= Math.pow(p, 1.0 / (double) queryStems.length);
         }
       }
@@ -237,7 +235,7 @@ public class RetrievalEvaluator {
   /*
    * Get the average document length for a specified field.
    */
-  private double getCollen(String fieldName) {
+  private double getColLen(String fieldName) {
 
     if (fieldName.equals("body")) {
       return colLenBody;
@@ -250,33 +248,6 @@ public class RetrievalEvaluator {
     }
 
     return 0.0;
-  }
-
-  /*
-   * Returns the CTF of a term in a specified field.
-   */
-  private static int getCtf(String termString, String fieldString) throws IOException {
-
-    int ctf = 0;
-
-    // Prepare to access the index
-    BytesRef termBytes = new BytesRef(termString);
-    Term term = new Term(fieldString, termBytes);
-    if (QryEval.READER.docFreq(term) < 1) {
-      return ctf;
-    }
-
-    // Lookup the inverted list.
-    DocsAndPositionsEnum iList =
-        MultiFields.getTermPositionsEnum(QryEval.READER, MultiFields.getLiveDocs(QryEval.READER),
-            fieldString, termBytes);
-    
-    // Calculate CTF
-    while (iList.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
-      ctf += iList.freq();
-    }
-    
-    return ctf;
   }
 
 }
