@@ -27,7 +27,7 @@ public class FeatureGenerator {
   private static int N_FEATURE = 18;
   private Map<String, String> params;
   private Set<Integer> featureDisable;
-  private Map<Integer, Double> pageRankScores;
+  private Map<String, Double> pageRankScores;
   private RetrievalEvaluator retrievalEvaluator;
 
   /**
@@ -50,19 +50,15 @@ public class FeatureGenerator {
     }
 
     // Read page rank scores
-    this.pageRankScores = new HashMap<Integer, Double>();
+    this.pageRankScores = new HashMap<String, Double>();
     if (!featureDisable.contains(3)) {
       Scanner scanner =
           new Scanner(new BufferedReader(new FileReader(this.params.get("letor:pageRankFile"))));
       while (scanner.hasNextLine()) {
         String line = scanner.nextLine();
-        int internalId;
-        try {
-          internalId = QryEval.getInternalDocid(line.substring(0, line.lastIndexOf('\t')));
-          double score = Double.parseDouble(line.substring(line.lastIndexOf('\t') + 1));
-          pageRankScores.put(internalId, score);
-        } catch (Exception e) {
-        }
+        String externalId = line.substring(0, line.lastIndexOf('\t'));
+        double score = Double.parseDouble(line.substring(line.lastIndexOf('\t') + 1));
+        pageRankScores.put(externalId, score);
       }
       scanner.close();
     }
@@ -119,10 +115,12 @@ public class FeatureGenerator {
         if (parts[0].equals(queryId)) {
           externalIds.add(parts[2]);
           relevances.add(Integer.parseInt(parts[3]));
-          featureVectors.add(calculateFeatures(query, QryEval.getInternalDocid(parts[2])));
+          featureVectors.add(calculateFeatures(query, parts[2], QryEval.getInternalDocid(parts[2])));
         }
       }
       relevanceScanner.close();
+
+      normalizeFeature(featureVectors);
       writeFeature(writer, queryId, relevances, externalIds, featureVectors);
     }
     queryScanner.close();
@@ -132,7 +130,7 @@ public class FeatureGenerator {
   /*
    * Returns a feature vector for the <q, d> pair.
    */
-  private Double[] calculateFeatures(String query, int internalId) throws IOException {
+  private Double[] calculateFeatures(String query, String externalId, int internalId) throws IOException {
 
     Double[] f = new Double[N_FEATURE];
 
@@ -143,7 +141,7 @@ public class FeatureGenerator {
     f[0] = getSpamScore(d);
     f[1] = getUrlDepth(rawUrl);
     f[2] = getWikiScore(rawUrl);
-    f[3] = getPageRankScore(internalId);
+    f[3] = getPageRankScore(externalId);
 
     // BM25 scores for <q, d> in 4 fields
     f[4] = retrievalEvaluator.getFeatureBM25(queryStems, internalId, "body", featureDisable);
@@ -208,12 +206,14 @@ public class FeatureGenerator {
   /*
    * Returns the PageRank score for a document.
    */
-  private double getPageRankScore(int internalId) {
+  private double getPageRankScore(String externalId) {
 
-    if (featureDisable.contains(3) || (!pageRankScores.containsKey(internalId))) {
+    if (featureDisable.contains(3)) {
       return 0.0;
+    } else if (pageRankScores.containsKey(externalId)) {
+      return pageRankScores.get(externalId);
     } else {
-      return pageRankScores.get(internalId);
+      return Double.NaN;
     }
   }
 
@@ -287,10 +287,45 @@ public class FeatureGenerator {
       String line = String.format("%d qid:%s", rels.get(i), qId);
       Double[] featureVector = vectors.get(i);
       for (int j = 0; j < featureVector.length; j++) {
-        line += String.format(" %d:%f", j + 1, featureVector[j]);
+        line += (" " + (j+1) + ":" + featureVector[j]);
       }
-      line += (" # " + externalIds.get(i) + "\n");
-      writer.write(line);
+      line += (" # " + externalIds.get(i));
+      // System.out.println(line);
+      writer.write(line+'\n');
+    }
+  }
+
+  private static void normalizeFeature(List<Double[]> featureValues) {
+
+    Double[] minValues = new Double[N_FEATURE];
+    Double[] maxValues = new Double[N_FEATURE];
+
+    // Get the value range to this feature
+    for (int i = 0; i < N_FEATURE; i++) {
+      minValues[i] = Double.MAX_VALUE;
+      maxValues[i] = Double.MIN_VALUE;
+
+      for (Double[] f : featureValues) {
+        if (!Double.isNaN(f[i])) {
+          if (f[i] < minValues[i]) {
+            minValues[i] = f[i];
+          }
+          if (f[i] > maxValues[i]) {
+            maxValues[i] = f[i];
+          }
+        }
+      }
+    }
+
+    // Calculate the normalized feature
+    for (Double[] f : featureValues) {
+      for (int i = 0; i < N_FEATURE; i++) {
+        if (minValues[i].equals(maxValues[i]) || Double.isNaN(f[i])) {
+          f[i] = 0.0;
+        } else {
+          f[i] = (f[i] - minValues[i]) / (maxValues[i] - minValues[i]);
+        }
+      }
     }
   }
 

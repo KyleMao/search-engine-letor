@@ -9,7 +9,3 @@ INPUT_DIR/
 TEST_DIR/
 OUTPUT_DIR/
 *.param
-PageRankInIndex.txt
-cw09training.query
-cw09training_nomissing.qrels
-train_feature
