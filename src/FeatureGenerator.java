@@ -242,7 +242,7 @@ public class FeatureGenerator {
     try {
       termVector = new TermVector(internalId, fieldName);
     } catch (Exception e) {
-      return score;
+      return Double.NaN;
     }
     for (int i = 1; i < termVector.stemsLength(); i++) {
       String stem = termVector.stemString(i);
@@ -290,7 +290,7 @@ public class FeatureGenerator {
         line += (" " + (j+1) + ":" + featureVector[j]);
       }
       line += (" # " + externalIds.get(i));
-      System.out.println(line);
+      //System.out.println(line);
       writer.write(line+'\n');
     }
   }

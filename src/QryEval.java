@@ -35,7 +35,7 @@ public class QryEval {
 
   private static String usage = "Usage:  java " + System.getProperty("sun.java.command")
       + " paramFile\n\n";
-  private static int MAX_RESULT = 100;
+  private static int N_RESULT = 100;
 
   // The index file reader is accessible via a global variable. This
   // isn't great programming style, but the alternative is for every

@@ -177,6 +177,7 @@ public class RetrievalEvaluator {
     } catch (Exception e) {
       return Double.NaN;
     }
+
     double score = 1.0;
     Set<Integer> hasScore = new HashSet<Integer>();
 
@@ -187,12 +188,12 @@ public class RetrievalEvaluator {
       String stem = termVector.stemString(i);
       if (Arrays.asList(queryStems).contains(stem)) {
         hasScore.add(Arrays.asList(queryStems).indexOf(stem));
-        // Calculate the Indri score
+        // Calculate the Indri scores
         double tf = termVector.stemFreq(i);
-        double ctf = QryEval.READER.totalTermFreq(new Term(fieldName, new BytesRef(stem)));
+        double ctf = termVector.totalStemFreq(i);
         double p_mle = ctf / colLen;
-        double p = (1 - lambda) * (tf + mu * p_mle) / (docLen + mu) + lambda * p_mle;
-        score *= Math.pow(p, 1.0 / (double) queryStems.length);
+        double p = lambda * (tf + mu * p_mle) / (docLen + mu) + (1.0 - lambda) * p_mle;
+        score *= Math.pow(p, 1.0 / queryStems.length);
       }
     }
 
@@ -205,8 +206,8 @@ public class RetrievalEvaluator {
           double ctf =
               QryEval.READER.totalTermFreq(new Term(fieldName, new BytesRef(queryStems[i])));
           double p_mle = ctf / colLen;
-          double p = (1 - lambda) * mu * p_mle / (docLen + mu) + lambda * p_mle;
-          score *= Math.pow(p, 1.0 / (double) queryStems.length);
+          double p = lambda * mu * p_mle / (docLen + mu) + (1.0 - lambda) * p_mle;
+          score *= Math.pow(p, 1.0 / queryStems.length);
         }
       }
     }
