@@ -115,7 +115,8 @@ public class FeatureGenerator {
         if (parts[0].equals(queryId)) {
           externalIds.add(parts[2]);
           relevances.add(Integer.parseInt(parts[3]));
-          featureVectors.add(calculateFeatures(query, parts[2], QryEval.getInternalDocid(parts[2])));
+          featureVectors
+              .add(calculateFeatures(query, parts[2], QryEval.getInternalDocid(parts[2])));
         }
       }
       relevanceScanner.close();
@@ -130,7 +131,8 @@ public class FeatureGenerator {
   /*
    * Returns a feature vector for the <q, d> pair.
    */
-  private Double[] calculateFeatures(String query, String externalId, int internalId) throws IOException {
+  private Double[] calculateFeatures(String query, String externalId, int internalId)
+      throws IOException {
 
     Double[] f = new Double[N_FEATURE];
 
@@ -284,14 +286,13 @@ public class FeatureGenerator {
       List<String> externalIds, List<Double[]> vectors) throws IOException {
 
     for (int i = 0; i < rels.size(); i++) {
-      String line = String.format("%d qid:%s", rels.get(i)+3, qId);
+      String line = String.format("%d qid:%s", rels.get(i) + 3, qId);
       Double[] featureVector = vectors.get(i);
       for (int j = 0; j < featureVector.length; j++) {
-        line += (" " + (j+1) + ":" + featureVector[j]);
+        line += (" " + (j + 1) + ":" + featureVector[j]);
       }
       line += (" # " + externalIds.get(i));
-      //System.out.println(line);
-      writer.write(line+'\n');
+      writer.write(line + '\n');
     }
   }
 
