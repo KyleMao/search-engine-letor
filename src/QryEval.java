@@ -5,8 +5,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Scanner;
+import java.util.Stack;
+import java.util.StringTokenizer;
 
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Analyzer.TokenStreamComponents;
@@ -35,7 +36,6 @@ public class QryEval {
 
   private static String usage = "Usage:  java " + System.getProperty("sun.java.command")
       + " paramFile\n\n";
-  private static int N_RESULT = 100;
 
   // The index file reader is accessible via a global variable. This
   // isn't great programming style, but the alternative is for every
@@ -78,13 +78,116 @@ public class QryEval {
 
     FeatureGenerator featureGenerator = new FeatureGenerator(params);
 
-    // generate training data
-    featureGenerator.generateTrainData();
+//    // generate training data
+//    featureGenerator.generateTrainData();
+//
+//    SvmRank svmRank = new SvmRank(params);
+//
+//    // train
+//    svmRank.trainSvm();
+    
+    // generate testing data for top 100 documents in initial BM25 ranking
+    featureGenerator.generateTestData();
 
     // print running time and memory usage
     long endTime = System.currentTimeMillis();
     System.out.println("Running Time: " + (endTime - startTime) + " ms");
     printMemoryUsage(false);
+  }
+
+  /**
+   * parseQuery converts a query string into a query tree.
+   * 
+   * @param qString A string containing a query
+   * @param r The retrieval model for the query
+   * @return currentOp
+   * @throws IOException
+   */
+  protected static Qryop parseQuery(String qString, RetrievalModel r) throws IOException {
+
+    Qryop currentOp = null;
+    Stack<Qryop> stack = new Stack<Qryop>();
+
+    // Add a default query operator to an unstructured query. This
+    // is a tiny bit easier if unnecessary whitespace is removed.
+    qString = qString.trim();
+    // Add a default operators for BM25 retrieval model
+    if (r instanceof RetrievalModelBM25) {
+      qString = "#SUM(" + qString + ")";
+    } else {
+      return null;
+    }
+
+    // Tokenize the query.
+    StringTokenizer tokens = new StringTokenizer(qString, "\t\n\r ,()", true);
+    String token = null;
+
+    // Each pass of the loop processes one token. To improve
+    // efficiency and clarity, the query operator on the top of the
+    // stack is also stored in currentOp.
+    while (tokens.hasMoreTokens()) {
+
+      token = tokens.nextToken();
+
+      if (token.matches("[ ,(\t\n\r]")) {
+        // Ignore most delimiters.
+      } else if (token.equalsIgnoreCase("#sum")) {
+        currentOp = new QryopSlSum();
+        stack.push(currentOp);
+      } else if (token.startsWith(")")) { // Finish current query operator.
+        // If the current query operator is not an argument to
+        // another query operator (i.e., the stack is empty when it
+        // is removed), we're done (assuming correct syntax - see
+        // below). Otherwise, add the current operator as an
+        // argument to the higher-level operator, and shift
+        // processing back to the higher-level operator.
+        stack.pop();
+        if (stack.empty())
+          break;
+        Qryop arg = currentOp;
+        if (arg.args.size() > 0) {
+          currentOp = stack.peek();
+          currentOp.add(arg);
+        }
+      } else {
+        // Lexical processing of the token before creating the query term, and check to see whether
+        // the token specifies a particular field (e.g., apple.title).
+        String[] termAndField = token.split("\\.");
+        String term;
+        String field;
+        if (termAndField.length == 2) {
+          field = termAndField[1];
+          if (!(field.equalsIgnoreCase("url") || field.equalsIgnoreCase("keywords")
+              || field.equalsIgnoreCase("title") || field.equalsIgnoreCase("body") || field
+                .equalsIgnoreCase("inlink"))) {
+            term = token;
+            field = "body";
+          } else {
+            term = termAndField[0];
+          }
+        } else {
+          term = token;
+          field = "body";
+        }
+
+        String[] processedToken = tokenizeQuery(term);
+        if (processedToken.length > 1) {
+          System.err.println("Error: Invalid query term.");
+          return null;
+        } else if (processedToken.length > 0) {
+          currentOp.add(new QryopIlTerm(processedToken[0], field));
+        }
+      }
+    }
+
+    // A broken structured query can leave unprocessed tokens on the
+    // stack, so check for that.
+    if (tokens.hasMoreTokens()) {
+      System.err.println("Error:  Query syntax is incorrect.  " + qString);
+      return null;
+    }
+
+    return currentOp;
   }
 
   /**

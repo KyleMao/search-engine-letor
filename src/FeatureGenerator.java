@@ -24,6 +24,7 @@ import org.apache.lucene.document.Document;
 
 public class FeatureGenerator {
 
+  private static int N_RESULT = 100;
   private static int N_FEATURE = 18;
   private Map<String, String> params;
   private Set<Integer> featureDisable;
@@ -85,11 +86,11 @@ public class FeatureGenerator {
   public void generateTrainData() throws Exception {
 
     // Create the output file
-    File evalOut = new File(params.get("letor:trainingFeatureVectorsFile"));
-    if (!evalOut.exists()) {
-      evalOut.createNewFile();
+    File trainFeatureFile = new File(params.get("letor:trainingFeatureVectorsFile"));
+    if (!trainFeatureFile.exists()) {
+      trainFeatureFile.createNewFile();
     }
-    BufferedWriter writer = new BufferedWriter(new FileWriter(evalOut.getAbsoluteFile()));
+    BufferedWriter writer = new BufferedWriter(new FileWriter(trainFeatureFile.getAbsoluteFile()));
 
     // Read the training queries
     Scanner queryScanner =
@@ -104,9 +105,9 @@ public class FeatureGenerator {
       Scanner relevanceScanner =
           new Scanner(new BufferedReader(new FileReader(params.get("letor:trainingQrelsFile"))));
 
+      // Store all the external IDs, relevances, feature vectors for documents in the same query
       List<String> externalIds = new ArrayList<String>();
       List<Integer> relevances = new ArrayList<Integer>();
-      // Store all the feature vectors for documents in the same query
       List<Double[]> featureVectors = new ArrayList<Double[]>();
 
       while (relevanceScanner.hasNextLine()) {
@@ -126,6 +127,41 @@ public class FeatureGenerator {
     }
     queryScanner.close();
     writer.close();
+  }
+
+  public void generateTestData() throws IOException {
+
+    RetrievalModel modelBM25 = getModel("BM25");
+
+    // Create the output file
+    File testFeatureFile = new File(params.get("letor:testingFeatureVectorsFile"));
+    if (!testFeatureFile.exists()) {
+      testFeatureFile.createNewFile();
+    }
+    BufferedWriter writer = new BufferedWriter(new FileWriter(testFeatureFile.getAbsoluteFile()));
+
+    // Read the test queries
+    Scanner queryScanner =
+        new Scanner(new BufferedReader(new FileReader(params.get("queryFilePath"))));
+
+    while (queryScanner.hasNextLine()) {
+      // Get initial BM25 ranking
+      String qLine = queryScanner.nextLine();
+      String queryId = qLine.substring(0, qLine.indexOf(':'));
+      String query = qLine.substring(qLine.indexOf(':') + 1);
+      Qryop qTree = QryEval.parseQuery(query, modelBM25);
+      QryResult result = qTree.evaluate(modelBM25);
+      DocScore docScore = new DocScore(result);
+
+      List<String> externalIds = new ArrayList<String>();
+      // Store all the feature vectors for documents in the same query
+      List<Double[]> featureVectors = new ArrayList<Double[]>();
+
+      for (int i = 0; i < N_RESULT && i < docScore.scores.size(); i++) {
+
+      }
+    }
+
   }
 
   /*
