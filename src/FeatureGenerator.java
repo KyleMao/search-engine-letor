@@ -129,7 +129,7 @@ public class FeatureGenerator {
     writer.close();
   }
 
-  public void generateTestData() throws IOException {
+  public void generateTestData() throws Exception {
 
     RetrievalModel modelBM25 = getModel("BM25");
 
@@ -158,10 +158,23 @@ public class FeatureGenerator {
       List<Double[]> featureVectors = new ArrayList<Double[]>();
 
       for (int i = 0; i < N_RESULT && i < docScore.scores.size(); i++) {
-
+        String externalId = docScore.getExternalDocid(i);
+        externalIds.add(externalId);
+        featureVectors.add(calculateFeatures(query, externalId,
+            QryEval.getInternalDocid(externalId)));
       }
-    }
 
+      // Add default relevance values
+      List<Integer> relevances = new ArrayList<Integer>();
+      for (int i = 0; i < externalIds.size(); i++) {
+        relevances.add(0);
+      }
+
+      normalizeFeature(featureVectors);
+      writeFeature(writer, queryId, relevances, externalIds, featureVectors);
+    }
+    queryScanner.close();
+    writer.close();
   }
 
   /*
