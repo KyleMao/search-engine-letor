@@ -78,16 +78,19 @@ public class QryEval {
 
     FeatureGenerator featureGenerator = new FeatureGenerator(params);
 
-//    // generate training data
-//    featureGenerator.generateTrainData();
-//
-//    SvmRank svmRank = new SvmRank(params);
-//
-//    // train
-//    svmRank.trainSvm();
-    
+    // generate training data
+    featureGenerator.generateTrainData();
+
+    SvmRank svmRank = new SvmRank(params);
+
+    // train
+    svmRank.trainSvm();
+
     // generate testing data for top 100 documents in initial BM25 ranking
     featureGenerator.generateTestData();
+    
+    // produce scores for the test data
+    svmRank.predict();
 
     // print running time and memory usage
     long endTime = System.currentTimeMillis();
