@@ -35,7 +35,14 @@ public class DocScore {
     }
   }
 
-  public List<DocScoreEntry> scores = new ArrayList<DocScoreEntry>();
+  public List<DocScoreEntry> scores;
+
+  /**
+   * Initialize the scores ArrayList.
+   */
+  public DocScore() {
+    scores = new ArrayList<DocScoreEntry>();
+  }
 
   /**
    * Get raw query results and create sorted document scores.
@@ -44,12 +51,30 @@ public class DocScore {
    * @throws IOException
    */
   public DocScore(QryResult result) throws IOException {
+    scores = new ArrayList<DocScoreEntry>();
     ScoreList scoreList = result.docScores;
     for (int i = 0; i < scoreList.scores.size(); i++) {
       scores.add(new DocScoreEntry(QryEval.getExternalDocid(scoreList.getDocid(i)), scoreList
           .getDocidScore(i)));
     }
 
+    Collections.sort(scores);
+  }
+
+  /**
+   * Add a score entry to the score list.
+   * 
+   * @param externalId The external document ID.
+   * @param score The score corresponding to the document.
+   */
+  public void add(String externalId, double score) {
+    scores.add(new DocScoreEntry(externalId, score));
+  }
+
+  /**
+   * Sort the scores.
+   */
+  public void sort() {
     Collections.sort(scores);
   }
 

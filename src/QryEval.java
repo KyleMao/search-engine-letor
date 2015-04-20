@@ -1,4 +1,8 @@
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
@@ -88,9 +92,12 @@ public class QryEval {
 
     // generate testing data for top 100 documents in initial BM25 ranking
     featureGenerator.generateTestData();
-    
+
     // produce scores for the test data
     svmRank.predict();
+
+    // re-rank the initial ranking and output new result
+    writeResults(params);
 
     // print running time and memory usage
     long endTime = System.currentTimeMillis();
@@ -191,6 +198,67 @@ public class QryEval {
     }
 
     return currentOp;
+  }
+
+  private static void writeResults(Map<String, String> params) throws IOException {
+
+    // create the output file
+    File evalOut = new File(params.get("trecEvalOutputPath"));
+    if (!evalOut.exists()) {
+      evalOut.createNewFile();
+    }
+    BufferedWriter writer = new BufferedWriter(new FileWriter(evalOut.getAbsoluteFile()));
+
+    // Get the scanners ready
+    Scanner idScanner =
+        new Scanner(new BufferedReader(
+            new FileReader(params.get("letor:testingFeatureVectorsFile"))));
+    Scanner scoreScanner =
+        new Scanner(new BufferedReader(new FileReader(params.get("letor:testingDocumentScores"))));
+
+    String lastQueryId = "";
+    DocScore docScore = null;
+    while (idScanner.hasNextLine()) {
+      String line = idScanner.nextLine();
+      String queryIdSeg = line.split(" ")[1];
+      String queryId = queryIdSeg.substring(queryIdSeg.indexOf(':') + 1);
+      if (!queryId.equals(lastQueryId)) {
+        // A query is finished, sort the scores and write the results
+        if (docScore != null) {
+          docScore.sort();
+          writeQueryResult(writer, docScore, lastQueryId);
+        }
+        lastQueryId = queryId;
+        docScore = new DocScore();
+      }
+      String externalId = line.substring(line.indexOf('#'));
+      double score = scoreScanner.nextDouble();
+      docScore.add(externalId, score);
+    }
+    idScanner.close();
+    scoreScanner.close();
+
+    docScore.sort();
+    writeQueryResult(writer, docScore, lastQueryId);
+    writer.close();
+  }
+
+  /**
+   * Write the query results into a file.
+   * 
+   * @param writer The writer used to write out the results.
+   * @param docScore The scores of top ranked documents.
+   * @param queryId A String specifying the ID of the query.
+   * @throws IOException
+   */
+  private static void writeQueryResult(BufferedWriter writer, DocScore docScore, String queryId)
+      throws IOException {
+    for (int i = 0; i < docScore.scores.size(); i++) {
+      String line =
+          String.format("%s Q0 %s %d %f zexim\n", queryId, docScore.getExternalDocid(i), i + 1,
+              docScore.getDocidScore(i));
+      writer.write(line);
+    }
   }
 
   /**
