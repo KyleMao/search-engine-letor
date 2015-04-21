@@ -192,7 +192,7 @@ public class RetrievalEvaluator {
         double tf = termVector.stemFreq(i);
         double ctf = termVector.totalStemFreq(i);
         double p_mle = ctf / colLen;
-        double p = lambda * (tf + mu * p_mle) / (docLen + mu) + (1.0 - lambda) * p_mle;
+        double p = (1.0 - lambda) * (tf + mu * p_mle) / (docLen + mu) + lambda * p_mle;
         score *= Math.pow(p, 1.0 / queryStems.length);
       }
     }
@@ -206,7 +206,7 @@ public class RetrievalEvaluator {
           double ctf =
               QryEval.READER.totalTermFreq(new Term(fieldName, new BytesRef(queryStems[i])));
           double p_mle = ctf / colLen;
-          double p = lambda * mu * p_mle / (docLen + mu) + (1.0 - lambda) * p_mle;
+          double p = (1.0 - lambda) * mu * p_mle / (docLen + mu) + lambda * p_mle;
           score *= Math.pow(p, 1.0 / queryStems.length);
         }
       }
