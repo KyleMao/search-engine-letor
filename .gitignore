@@ -9,3 +9,4 @@ INPUT_DIR/
 TEST_DIR/
 OUTPUT_DIR/
 *.param
+*.pl

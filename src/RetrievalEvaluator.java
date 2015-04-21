@@ -47,6 +47,7 @@ public class RetrievalEvaluator {
   public RetrievalEvaluator(RetrievalModel modelBM25, RetrievalModel modelIndri) throws IOException {
 
     this.dls = new DocLengthStore(QryEval.READER);
+    this.N = QryEval.READER.numDocs();
 
     // Read the BM25 parameters if BM25 model is available
     if (modelBM25 != null) {
@@ -54,7 +55,6 @@ public class RetrievalEvaluator {
       this.b = modelBM25.getParameter("b");
       this.k_1 = modelBM25.getParameter("k_1");
       this.k_3 = modelBM25.getParameter("k_3");
-      this.N = QryEval.READER.numDocs();
       this.avgLenBody =
           (double) QryEval.READER.getSumTotalTermFreq("body") / QryEval.READER.getDocCount("body");
       this.avgLenTitle =
@@ -85,7 +85,7 @@ public class RetrievalEvaluator {
   }
 
   /**
-   * Get the BM25 score for <q, d>of a specified field.
+   * Get the BM25 score for (q, d) of a specified field.
    * 
    * @param queryStems The stemmed BOW query.
    * @param internalId The internal document ID.
@@ -142,7 +142,7 @@ public class RetrievalEvaluator {
   }
 
   /**
-   * Get the Indri score for <q, d>of a specified field.
+   * Get the Indri score for (q, d) of a specified field.
    * 
    * @param queryStems The stemmed BOW query.
    * @param internalId The internal document ID.
@@ -211,6 +211,62 @@ public class RetrievalEvaluator {
         }
       }
     }
+
+    return score;
+  }
+
+  /**
+   * Get the lnc.ltc score for (q, d) of a specified field.
+   * 
+   * @param queryStems The stemmed BOW query.
+   * @param internalId The internal document ID.
+   * @param fieldName The field name.
+   * @param featureDisable Specifies which feature is disabled.
+   * @return lnc.ltc score
+   * @throws IOException
+   */
+  public double getFeatureLncltc(String[] queryStems, int internalId, String fieldName,
+      Set<Integer> featureDisable) throws IOException {
+
+    if (featureDisable.contains(16) && fieldName.equals("body")) {
+      return 0.0;
+    }
+    if (featureDisable.contains(17) && fieldName.equals("title")) {
+      return 0.0;
+    }
+
+    double qryLenSum = 0.0;
+    for (int i = 0; i < queryStems.length; i++) {
+      double df = QryEval.READER.docFreq(new Term(fieldName, new BytesRef(queryStems[i])));
+      double idf = Math.log((double) N / df);
+      qryLenSum += Math.pow(idf, 2);
+    }
+
+    TermVector termVector = null;
+    try {
+      termVector = new TermVector(internalId, fieldName);
+    } catch (Exception e) {
+      return Double.NaN;
+    }
+
+    double docLenSum = 0.0;
+    double tfIdfSum = 0.0;
+    for (int i = 1; i < termVector.stemsLength(); i++) {
+      String stem = termVector.stemString(i);
+      double tf = termVector.stemFreq(i);
+      double tf_weight = Math.log(tf) + 1.0;
+      docLenSum += Math.pow(tf_weight, 2);
+
+      if (Arrays.asList(queryStems).contains(stem)) {
+        double df = termVector.stemDf(i);
+        double idf = Math.log((double) N / df);
+        tfIdfSum += tf_weight * idf;
+      }
+    }
+
+    double qryLenNorm = Math.sqrt(qryLenSum);
+    double docLenNorm = Math.sqrt(docLenSum);
+    double score = tfIdfSum / (docLenNorm * qryLenNorm);
 
     return score;
   }

@@ -212,8 +212,9 @@ public class FeatureGenerator {
     f[12] = getTermOverlapScore(queryStems, internalId, "url");
     f[15] = getTermOverlapScore(queryStems, internalId, "inlink");
 
-    f[16] = 0.0;
-    f[17] = 0.0;
+    // lnc.ltc scores for <q, d> in 2 fields
+    f[16] = retrievalEvaluator.getFeatureLncltc(queryStems, internalId, "body", featureDisable);
+    f[17] = retrievalEvaluator.getFeatureLncltc(queryStems, internalId, "title", featureDisable);
 
     return f;
   }

@@ -231,7 +231,7 @@ public class QryEval {
         lastQueryId = queryId;
         docScore = new DocScore();
       }
-      String externalId = line.substring(line.indexOf('#'));
+      String externalId = line.substring(line.indexOf('#') + 2);
       double score = scoreScanner.nextDouble();
       docScore.add(externalId, score);
     }
@@ -255,9 +255,9 @@ public class QryEval {
       throws IOException {
     for (int i = 0; i < docScore.scores.size(); i++) {
       String line =
-          String.format("%s Q0 %s %d %f zexim\n", queryId, docScore.getExternalDocid(i), i + 1,
+          String.format("%s Q0 %s %d %f zexim", queryId, docScore.getExternalDocid(i), i + 1,
               docScore.getDocidScore(i));
-      writer.write(line);
+      writer.write(line + '\n');
     }
   }
 
