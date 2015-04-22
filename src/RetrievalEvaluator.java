@@ -228,6 +228,7 @@ public class RetrievalEvaluator {
   public double getFeatureLncltc(String[] queryStems, int internalId, String fieldName,
       Set<Integer> featureDisable) throws IOException {
 
+    // Return 0.0 when this score is not needed
     if (featureDisable.contains(16) && fieldName.equals("body")) {
       return 0.0;
     }
@@ -235,6 +236,7 @@ public class RetrievalEvaluator {
       return 0.0;
     }
 
+    // Query length normalization
     double qryLenSum = 0.0;
     for (int i = 0; i < queryStems.length; i++) {
       double df = QryEval.READER.docFreq(new Term(fieldName, new BytesRef(queryStems[i])));
@@ -255,8 +257,10 @@ public class RetrievalEvaluator {
       String stem = termVector.stemString(i);
       double tf = termVector.stemFreq(i);
       double tf_weight = Math.log(tf) + 1.0;
+      // Document length normalization
       docLenSum += Math.pow(tf_weight, 2);
 
+      // tf-idf
       if (Arrays.asList(queryStems).contains(stem)) {
         double df = termVector.stemDf(i);
         double idf = Math.log((double) N / df);
